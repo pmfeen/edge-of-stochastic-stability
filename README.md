@@ -1,13 +1,13 @@
 # Edge of Stochastic Stability (EOSS)
 
-This repository contains research code for exploring the **Edge of Stochastic Stability** during neural network training. It includes a configurable training script, measurement utilities and analysis helpers for evaluating sharpness, gradient noise interaction and related metrics.
+This repository contains the research code accompanying the paper [Edge of Stochastic Stability: Revisiting the Edge of Stability for SGD](https://arxiv.org/abs/2412.20553) by Arseniy Andreyev and Pierfrancesco Beneventano
 
 ## Installation
 
-1. Create a virtual environment (optional):
+1. Create a virtual environment (optional; you can use conda instead):
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
+   python3 -m venv eoss
+   source eoss/bin/activate
    ```
 2. Install the requirements:
    ```bash
@@ -23,15 +23,19 @@ export DATASETS="/path/to/your/datasets"
 export RESULTS="/path/to/your/results"
 ```
 
-If these environment variables are not set, the scripts will fall back to default paths:
-- **Default datasets path**: `/scratch/gpfs/andreyev/datasets/`
-- **Default results path**: `/scratch/gpfs/andreyev/eoss/results`
-
 The following scripts use these environment variables:
 - `training.py`
-- `compute_final_fullbs.py` 
-- `compute_final_gHg.py`
-- `sharpness_gap.py`
+- `download_datasets.py`
+- `visualization/plot_results.py`
+
+
+### Downloading the datasets
+
+Before the first training run, download the datasets:
+```bash
+python download_datasets.py
+```
+
 
 Example structure:
 ```
@@ -40,46 +44,72 @@ $DATASETS/
 └── other_datasets/
 
 $RESULTS/
-├── experiment1/
-└── experiment2/
+├── cifar10_mlp/
+│   └── 20250625_0640_14_lr0.00800_b8/
+│       ├── results.txt
+│       └── checkpoints/
+└── other_experiments/
 ```
 
 ## Running Training
 
 A typical invocation looks like:
 ```bash
-export DATASETS="/path/to/datasets"
-export RESULTS="/path/to/results"
-python training.py --dataset cifar10 --model mlp --batch 64 --epochs 20 --lr 0.001
+python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.01 --steps 150000  --num_data 8192 --init_scale 0.2 --dataset_seed 111 --init_seed 8312 --lambdamax --batch-sharpness
 ```
+
+This command:
+- Trains an MLP on CIFAR-10 with 8192 samples
+- Uses batch size 8 and learning rate 0.01
+- Runs for 150,000 steps
+- Initializes weights with scale 0.2
+- Tracks Lambda Max (full-batch sharpness) and batch sharpness during training
+
+The last set of flags (`--lambdamax`, `--batch-sharpness`, etc.) specify which quantities to track during training. Without these flags, only basic metrics like loss and accuracy are recorded.
+
 The script logs metrics to `results.txt` inside a timestamped folder under the results directory. Checkpoints are stored in `checkpoints/`.
 
 ### Measurement Options
 
-Training supports additional measurements such as Lambda Max, batch sharpness and Gradient-Noise Interaction. Enable them with flags like `--lambdamax`, `--batch-sharpness` and `--gni`. See `training.py --help` for all options.
+Training supports additional measurements such as lambda max, batch sharpness, batch lambda max and Gradient-Noise Interaction. See `training.py --help` for all options.
 
 ## Post-Training Analysis
 
-After training finishes, you can compute final metrics with:
+After training finishes, you can visualize the metrics with:
 ```bash
-export DATASETS="/path/to/datasets"
-export RESULTS="/path/to/results"
-#TODO
+python visualization/plot_results.py
 ```
-These scripts expect the same dataset and results directories as the training script (configured via environment variables).
+The `visualization/plot_results.py` script automatically finds and plots the most recent training run in the RESULTS folder, generating simple plots from `results.txt` and saving them in the `visualization/img/` folder.
+See `visualization/data_visualization.ipynb` for an example of a notebook to plot additional quantities and customize the plots
 
-
-## Visualization
-
-A lightweight `plot_results.py` script (to be added) will generate simple plots from `results.txt` using Matplotlib.
+See also `experiments/template.ipynb` for a template jupyter notebook to run further experiments on trained networks
 
 ## Directory Layout
 
 ```
-training.py              # main training entry point
-utils/                   # data loading, models and measurement utilities
-requirements.txt         # dependencies
-README.md                # this file
+edge-of-stochastic-stability/
+├── training.py                      # main training entry point
+├── download_datasets.py             # script to download required datasets
+├── requirements.txt                 # Python dependencies
+├── README.md                        # this file
+├── LICENSE                          # Apache 2.0 license
+├── .gitignore                       # Git ignore rules
+├── utils/                           # core utilities
+│   ├── __init__.py
+│   ├── data.py                      # dataset loading and preprocessing
+│   ├── nets.py                      # neural network models (MLP, CNN, ResNet)
+│   ├── measure.py                   # procedures to measure sharpness and other quantities
+│   ├── noise.py                     # utilities for running noisy GD
+│   ├── storage.py                   # result storage and checkpointing
+│   ├── resnet_new.py               # ResNet model implementations
+│   ├── resnet_bn.py                # ResNet with batch normalization
+│   └── resnet_bn_new.py            # Updated ResNet with batch norm
+├── visualization/                   # plotting and analysis tools
+│   ├── plot_results.py             # example script to generate plots from results
+│   ├── data_visualization.ipynb    # template for additional plots of runs
+│   └── img/                        # generated plots and figures
+└── experiments/                     # experiment templates and notebooks
+    └── template.ipynb              # template jupyter notebook for experiments
 ```
 
 ## License
