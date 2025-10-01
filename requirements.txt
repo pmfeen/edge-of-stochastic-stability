@@ -7,6 +7,13 @@ einops>=0.7.0
 
 # Numerical computing
 numpy>=1.24.0
+scipy>=1.10.0
+
+# Experiment tracking
+wandb>=0.17
+
+# Testing
+pytest>=7.0.0
 
 # Optional: For visualization (commented out since not actively used)
 # plotly>=5.0.0 
