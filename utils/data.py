@@ -1,4 +1,6 @@
-from typing import Union
+from typing import Union, Tuple
+import pickle
+import os
 
 import torch as T
 import torch
@@ -6,6 +8,7 @@ import torch.nn as nn
 from einops import rearrange, repeat
 import numpy as np
 from torchvision import datasets
+from torch.utils.data import Dataset
 from pathlib import Path
 import torch.nn.functional as F
 
@@ -35,6 +38,10 @@ def get_dataset_presets():
                 'input_dim': 1*28*28,
                 'output_dim': 10
             },
+            'imagenet32': {
+                'input_dim': 3*32*32,
+                'output_dim': 1000
+            }
 
         }
     
@@ -316,6 +323,117 @@ def prepare_cifar10_ez(dataset_folder: Path, num_data: int, dataset_seed: int = 
     return X_train, Y_train, X_test, Y_test
 
 
+def load_batch(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Read one ImageNet-32 pickle batch and return images (HWC uint8) & labels."""
+    with open(path, "rb") as f:
+        entry = pickle.load(f, encoding="bytes")
+
+    data = entry["data"]          # (N, 3072) uint8
+    labels = entry["labels"]
+
+    images = data.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+    labels = np.asarray(labels, dtype=np.int64)
+    return images, labels
+
+
+def load_imagenet32(root: str, train: bool = True) -> Tuple[np.ndarray, np.ndarray]:
+    """Load all train batches or the validation split into memory."""
+    if train:
+        batches = sorted(f for f in os.listdir(root) if f.startswith("train_data_batch_"))
+        if not batches:
+            raise FileNotFoundError("No 'train_data_batch_*' files found in " + root)
+    else:
+        batches = ["val_data"]
+
+    imgs_list, lbls_list = [], []
+    for bname in batches:
+        imgs, lbls = load_batch(os.path.join(root, bname))
+        imgs_list.append(imgs)
+        lbls_list.append(lbls)
+
+    return np.concatenate(imgs_list), np.concatenate(lbls_list)
+
+
+class ImageNet32(Dataset):  # type: ignore[misc]
+    """PyTorch-friendly wrapper (optional)."""
+
+    def __init__(self, root: str, train: bool = True, transform=None, target_transform=None):
+        self.images, self.labels = load_imagenet32(root, train)
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __len__(self):  # type: ignore[override]
+        return self.images.shape[0]
+
+    def __getitem__(self, idx):  # type: ignore[override]
+        img, lbl = self.images[idx], int(self.labels[idx])
+        if self.transform:
+            img = self.transform(img)
+        elif torch and not isinstance(img, torch.Tensor):
+            img = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
+        if self.target_transform:
+            lbl = self.target_transform(lbl)
+        return img, lbl
+
+
+def prepare_imagenet32(dataset_folder: Path, num_data: int, dataset_seed: int = 888, loss_type: str = 'mse'):
+    """Prepare ImageNet32 dataset for training."""
+    datafolder = dataset_folder / 'imagenet32'
+    
+    # Load train and test data
+    train_images, train_labels = load_imagenet32(str(datafolder), train=True)
+    test_images, test_labels = load_imagenet32(str(datafolder), train=False)
+    
+    train_size = num_data
+
+    for partition in ['train', 'test']:
+        if partition == 'train':
+            partition_data = train_images
+            partition_target = train_labels
+            
+            if num_data > 0 and num_data < len(partition_data):
+                rng = np.random.default_rng(dataset_seed)
+                idx = rng.choice(len(partition_data), train_size, replace=False)
+                partition_data = partition_data[idx]
+                partition_target = partition_target[idx]
+        else:
+            partition_data = test_images
+            partition_target = test_labels
+
+        X = T.tensor(partition_data)
+        Y = T.tensor(partition_target)
+
+        # Normalize the images
+        X = X / 255.0
+        X = X.float()
+
+        # ImageNet normalization values
+        X = X - T.tensor([0.485, 0.456, 0.406])
+        X = X / T.tensor([0.229, 0.224, 0.225])
+
+        X = rearrange(X, 'b w h c -> b c w h')
+
+        X = X.detach().float()
+
+        # Now Y
+        Y = Y - 1 # ImageNet labels are from 1 to 1000, not 0 to 999
+        if loss_type == 'mse':
+            Y = F.one_hot(Y, num_classes=1000).float()  # ImageNet has 1000 classes
+        else:
+            Y = Y.long()
+
+        if partition == 'train':
+            X_train = X
+            Y_train = Y
+        else:
+            X_test = X
+            Y_test = Y
+        
+    return X_train, Y_train, X_test, Y_test
+
+
+
+
 def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: int, classes: list, dataset_seed: int = 888,
                     loss_type: str = 'mse'
                     ):
@@ -333,4 +451,6 @@ def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: in
         return prepare_svhn(dataset_folder, num_data, dataset_seed=dataset_seed, loss_type=loss_type)
     if dataset == 'fmnist':
         return prepare_fmnist(dataset_folder, num_data, dataset_seed=dataset_seed, loss_type=loss_type)
+    if dataset == 'imagenet32':
+        return prepare_imagenet32(dataset_folder, num_data, dataset_seed=dataset_seed, loss_type=loss_type)
     

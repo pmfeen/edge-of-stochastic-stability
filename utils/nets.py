@@ -115,11 +115,14 @@ class SquaredLoss(nn.modules.loss._Loss):
         super().__init__(size_average, reduce, reduction)
 
     def forward(self, input: T.Tensor, target: T.Tensor,
-                sampling_vector: T.Tensor = None) -> T.Tensor:
+                sampling_vector: T.Tensor = None,
+                reduction: str = None
+                ) -> T.Tensor:
         '''
         THE MASK NEEDS TO BE "NORMALIZED" - i.e. with expected value of 1/n*unit_vector, 
         and NOT just unit_vector, without the normalization
         this is because without mask there is averaging happening!
+        Inherently, this is to perform Jacobian-vector products
         '''
 
         if input.shape != target.shape:
@@ -149,11 +152,24 @@ class SquaredLoss(nn.modules.loss._Loss):
             loss_per_sample = total_L2.sum(dim=-1) # shape = (batch_size,)
         else:
             loss_per_sample = total_L2
+
+        
+        if not reduction is None:
+            if reduction == 'none':
+                return loss_per_sample
+
+            raise ValueError(f"Are you sure you want to use reduction={reduction}? Double-check what you doing - maybe use self.reduction variable at __init__ instead?\n")
         
         if self.reduction == 'mean':
             return loss_per_sample.mean()
         if self.reduction == 'sum':
             return loss_per_sample.sum()
+        # we are not introducing this just as a safety
+        # if self.reduction == 'none':
+        #     return loss_per_sample
+        
+        raise ValueError("Unknown reduction type")
+        
 
 
 
@@ -294,6 +310,25 @@ def initialize_mlp(net, scale=None):
             m.weight.data = m.weight.data * scale
             nn.init.zeros_(m.bias)
 
+
+def initialize_cnn(net, scale=None):
+    if scale is None:
+        scale = 1.0
+    for m in net.modules():
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+            m.weight.data.mul_(scale)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+            m.weight.data.mul_(scale)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.ones_(m.weight)
+            nn.init.zeros_(m.bias)
+
 def initialize_resnet_old(net, scale=0.01):
     for m in net.modules():
         if isinstance(m, torch.nn.Conv2d):
@@ -391,10 +426,7 @@ def initialize_net(net, scale=None, seed=None):
         elif isinstance(net, ResNetBN):
             initialize_resnet_bn(net, scale=scale)
         elif isinstance(net, CNN):
-            # we don't need to initialize CNN
-            if scale is not None:
-                raise ValueError("We don't have CNN initialization with scale. Currently only default init is implemented")
-            pass
+            initialize_cnn(net, scale=scale)
         else:
             raise ValueError("Unknown net type")
 

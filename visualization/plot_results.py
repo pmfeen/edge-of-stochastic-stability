@@ -1,228 +1,155 @@
-"""
-Plot visualization for training results from stochastic stability experiments.
-
-This script automatically finds the most recent training run and creates
-comprehensive plots showing various metrics like batch sharpness, lambda max,
-batch lambda max, GNI, and accuracy.
-"""
-
-import pandas as pd
-from pathlib import Path
-
-# import plotly.express as px
-from matplotlib import pyplot as plt
-import numpy as np
-
-from collections import OrderedDict
+from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
 
-# ====================================
-# Configuration and Constants
-# ====================================
+import pandas as pd
+from matplotlib import pyplot as plt
 
-# Column names for the results CSV file
-COLUMN_NAMES = ['epoch', 'step', 'batch_loss', 'full_loss', 'batch_lmax', 'lmax', 'batch_sharpness', 'total_ghg', 'fisher_batch_eig', 'fisher_total_eig', 'batch_sharpness_static', 'gni', 'full_acc', 'param_dist']
 
-# Check required environment variables
-if 'RESULTS' not in os.environ:
-    raise ValueError("Please set the environment variable 'RESULTS'. Use 'export RESULTS=/path/to/results'")
+COLUMN_NAMES = [
+    "epoch",
+    "step",
+    "batch_loss",
+    "full_loss",
+    "lambda_max",
+    "step_sharpness",
+    "batch_sharpness",
+    "gni",
+    "total_accuracy",
+]
 
-RES_FOLDER = Path(os.environ.get('RESULTS'))
 
-# ====================================
-# Data Loading and Preprocessing
-# ====================================
+class ResultsConfigError(RuntimeError):
+    pass
 
-# Find the most recently created folder
-most_recent_folder = None
-most_recent_time = 0
 
-for dataset_folder in RES_FOLDER.iterdir():
-    if dataset_folder.is_dir():
-        for run_folder in dataset_folder.iterdir():
-            if run_folder.is_dir():
-                folder_mtime = run_folder.stat().st_mtime
-                if folder_mtime > most_recent_time:
-                    most_recent_time = folder_mtime
-                    most_recent_folder = run_folder
+@dataclass(frozen=True)
+class RunInfo:
+    folder: Path
+    batch_size: int
+    lr: float
 
-if most_recent_folder is None:
-    raise ValueError("No run folders found in the results directory")
 
-path = most_recent_folder
+def require_env_path(name: str) -> Path:
+    value = os.environ.get(name)
+    if not value:
+        raise ResultsConfigError(f"Set {name} before running this script.")
+    return Path(value)
 
-print(f"Using the most recent folder: {most_recent_folder}")
 
-# Read the specific run data
-run_path = str(path)
-batch_size = int(run_path.split('_')[-1][1:])  # Extract batch size from folder name
-file_path = path / 'results.txt'
-df = pd.read_csv(file_path, skiprows=4, sep=',', header=None, names=COLUMN_NAMES, na_values=['nan'], 
-                 skipinitialspace=True)
+def iter_run_folders(results_root: Path) -> Iterable[Path]:
+    for dataset_folder in results_root.iterdir():
+        if not dataset_folder.is_dir():
+            continue
+        yield from (child for child in dataset_folder.iterdir() if child.is_dir())
 
-# Extract learning rate from folder name
-lr_size = run_path.split('_')[-2][2:]
-lr = float(lr_size)
 
-# Extract model name from folder path
-model_name = run_path.split('/')[0].split('_')[1:]
-model_name = '_'.join(model_name)
+def latest_run(results_root: Path) -> RunInfo:
+    runs = sorted(iter_run_folders(results_root), key=lambda path: path.stat().st_mtime)
+    if not runs:
+        raise ResultsConfigError(f"No runs found under {results_root}")
 
-# ====================================
-# Plot Setup and Configuration
-# ====================================
+    folder = runs[-1]
+    parts = folder.name.split('_')
 
-# Create the main plot
-fig, ax = plt.subplots(figsize=(10, 5))
+    try:
+        lr_token = next(p for p in parts if p.startswith('lr'))
+        batch_token = next(p for p in parts if p.startswith('b'))
+        lr = float(lr_token[2:])
+        batch_size = int(batch_token[1:])
+    except (StopIteration, ValueError) as exc:  # pragma: no cover - folder naming fallback
+        raise ResultsConfigError(f"Unrecognised folder naming scheme: {folder.name}") from exc
 
-# Add horizontal line for stability threshold (2/η)
-ax.axhline(y=2/lr, color='black', linestyle='--', label=r'2/$\eta$')
+    return RunInfo(folder=folder, batch_size=batch_size, lr=lr)
 
-# Set y-axis limits based on learning rate
-ax.set_ylim(1, 2/lr*2)
-# ax.set_ylim(0, 20)  # Alternative fixed limits
 
-# ====================================
-# Batch Sharpness Plotting
-# ====================================
+def load_results(run: RunInfo) -> pd.DataFrame:
+    file_path = run.folder / 'results.txt'
+    if not file_path.exists():
+        raise ResultsConfigError(f"Missing results.txt in {run.folder}")
 
-# Plot individual step sharpness values (scattered points)
-ax.scatter(df['step'],
-           df['batch_sharpness'], label='step sharpness', color='red', alpha=0.2, s=2)
-
-# Calculate averaging window based on dataset size and batch size
-dataset_size = 8192
-steps_in_epoch = dataset_size // batch_size
-average_over = steps_in_epoch * int(np.sqrt(batch_size))
-
-# Compute rolling average of batch sharpness for smoother visualization
-df['batch_sharpness_avg'] = (df['batch_sharpness']).rolling(window=average_over, min_periods=1, center=True).mean()
-
-# Plot the averaged batch sharpness
-ax.plot(df['step'], df['batch_sharpness_avg'], color='#2ca02c', label='batch sharpness', linewidth=1.5)
-
-# ====================================
-# Batch Lambda Max Plotting
-# ====================================
-
-# Plot individual step lambda max values (scattered points)
-ax.scatter(df['step'],
-           df['batch_lmax'], label=r'step $\lambda^b_{max}$', color='blue', alpha=0.2, s=2)
-
-# Recalculate averaging parameters (keeping for clarity)
-steps_in_epoch = dataset_size // batch_size
-average_over = steps_in_epoch * int(np.sqrt(batch_size))
-
-# Compute rolling average of batch lambda max
-df['batch_lmax_avg'] = (df['batch_lmax']).rolling(window=average_over, min_periods=1, center=False).mean()
-
-# Plot the averaged batch lambda max
-ax.plot(df['step'], 
-    df['batch_lmax_avg'], 
-    color='black', 
-    label=r'$\lambda^b_{max}$', 
-    linewidth=1.5
+    df = pd.read_csv(
+        file_path,
+        skiprows=4,
+        sep=',',
+        header=None,
+        names=COLUMN_NAMES,
+        na_values=['nan'],
+        skipinitialspace=True,
     )
+    return df
 
-# ====================================
-# Full Dataset Lambda Max Plotting
-# ====================================
 
-# Filter out NaN values for clean plotting
-valid_data = df[['step', 'lmax']].dropna()
+def rolling_average(series: pd.Series, window_fraction: float = 0.02) -> pd.Series:
+    if series.empty:
+        return series
 
-# Plot full dataset lambda max
-ax.plot(valid_data['step'],
-        valid_data['lmax'],
-        label=r'$\lambda_{max}$',
-        color='#1f77b4',
-        linewidth=1.5)
+    window = max(1, int(len(series) * window_fraction))
+    return series.rolling(window=window, min_periods=1, center=True).mean()
 
-# ====================================
-# Gradient-Noise Interaction (GNI) Plotting
-# ====================================
 
-# # Filter out NaN values for GNI
-# valid_data = df[['step', 'gni']].dropna()
+def plot_metrics(df: pd.DataFrame, run: RunInfo) -> plt.Figure:
+    fig, ax = plt.subplots(figsize=(10, 5))
 
-# # Plot raw GNI values with transparency
-# ax.plot(valid_data['step'],
-#                 valid_data['gni'],
-#                 label='GNI',
-#                 color='#9467bd',  # Purple color
-#                 alpha=0.5,
-#                 linewidth=1.5)
+    ax.axhline(y=2 / run.lr, color='black', linestyle='--', label=r'2/$\eta$')
 
-# # Calculate smoothed GNI using rolling average for better visualization
-# valid_data_smooth = df[['step', 'gni']].dropna()
-# valid_data_smooth['gni_smooth'] = valid_data_smooth['gni'].rolling(window=20, min_periods=1, center=True).mean()
+    batch_sharp = df[['step', 'batch_sharpness']].dropna()
+    if not batch_sharp.empty:
+        ax.plot(batch_sharp['step'], batch_sharp['batch_sharpness'], label='batch sharpness', color='#2ca02c')
 
-# # Plot smoothed GNI
-# ax.plot(valid_data_smooth['step'],
-#     valid_data_smooth['gni_smooth'],
-#     label='GNI (smoothed)',
-#     color='#9467bd',  # Same purple color
-#     alpha=1,
-#     linewidth=2)
+    step_sharp = df[['step', 'step_sharpness']].dropna()
+    if not step_sharp.empty:
+        averaged = rolling_average(step_sharp['step_sharpness'])
+        ax.plot(step_sharp['step'], averaged, label='step sharpness (avg)', color='#d62728')
 
-# ====================================
-# Plot Formatting and Labels
-# ====================================
+    lmax = df[['step', 'lambda_max']].dropna()
+    if not lmax.empty:
+        ax.plot(lmax['step'], lmax['lambda_max'], label=r'$\lambda_{max}$', color='#1f77b4')
 
-# Add vertical line for specific events (currently commented out)
-# ax.axvline(x=14848, color='purple', linestyle='--', label='LR increase spot')
+    gni = df[['step', 'gni']].dropna()
+    if not gni.empty:
+        ax.plot(gni['step'], gni['gni'], label='GNI', color='#9467bd', alpha=0.7)
 
-# Add legend and labels
-ax.legend(loc='upper left') 
+    ax.set_ylim(1, 4 / run.lr)
+    ax.set_xlabel('steps')
+    ax.set_title(f'batch size {run.batch_size}')
+    ax.legend(loc='upper left')
 
-ax.set_title(f'batch size {batch_size}')
-ax.set_xlabel('steps')
+    ax_loss = ax.twinx()
+    loss = df[['step', 'full_loss']].dropna()
+    if not loss.empty:
+        ax_loss.plot(loss['step'], loss['full_loss'], color='gray', label='full batch loss')
+        ax_loss.set_yscale('log')
+        ax_loss.set_ylabel('Loss')
+        ax_loss.legend(loc='upper right')
 
-# ====================================
-# Secondary Axes: Accuracy and Loss
-# ====================================
+    return fig
 
-# # Add third y-axis for accuracy (positioned on the right, offset outward)
-# ax3 = ax.twinx()
-# # Offset the position of ax3 to avoid overlap with loss axis
-# ax3.spines['right'].set_position(('outward', 60))  # Move 60 points outward
 
-# # Plot accuracy data
-# valid_acc = df[['step', 'full_acc']].dropna()
-# ax3.plot(valid_acc['step'], valid_acc['full_acc'], 
-#          color='purple', label='accuracy',
-#          marker='o', markersize=4, linestyle='-', alpha=0.7)
+def save_figure(fig: plt.Figure, run: RunInfo) -> Path:
+    script_dir = Path(__file__).parent
+    img_dir = script_dir / 'img'
+    img_dir.mkdir(exist_ok=True)
 
-# # Configure accuracy axis
-# ax3.set_ylabel('Accuracy')
-# ax3.set_ylim(0, 1)  # Accuracy is typically between 0 and 1
-# ax3.legend(loc='center right')
+    filename = f"{run.folder.name}_results.png"
+    output_path = img_dir / filename
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    return output_path
 
-# Add second y-axis for loss
-ax2 = ax.twinx()
-ax2.plot(df['step'], df['full_loss'].interpolate(), 
-         color='gray', label='full batch loss',
-         alpha=1)
 
-# Configure loss axis
-ax2.set_ylabel('Loss')
-ax2.set_yscale('log')  # Log scale for loss visualization
-ax2.set_ylim(1e-4, 1)
-ax2.legend(loc='upper right')
+def main() -> None:
+    results_root = require_env_path('RESULTS') / 'plaintext'
+    run = latest_run(results_root)
+    print(f"Using the most recent folder: {run.folder}")
 
-# ====================================
-# Display Plot
-# ====================================
+    df = load_results(run)
+    fig = plot_metrics(df, run)
+    output_path = save_figure(fig, run)
+    print(f"Plot saved to: {output_path}")
 
-# Save plot to img folder in the same directory as this script
-script_dir = Path(__file__).parent
-img_dir = script_dir / 'img'
-img_dir.mkdir(exist_ok=True)
 
-# Create filename based on the most recent folder name
-plot_filename = f"{most_recent_folder.name}_results.png"
-save_path = img_dir / plot_filename
-
-plt.savefig(save_path, dpi=300, bbox_inches='tight')
-print(f"Plot saved to: {save_path}")
+if __name__ == '__main__':
+    main()
