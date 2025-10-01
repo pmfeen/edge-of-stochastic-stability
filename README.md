@@ -37,7 +37,8 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   ```bash
   python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.02 \
     --steps 10000 --num-data 64 \
-    --lambdamax --batch-sharpness --disable-wandb
+    --lambdamax --batch-sharpness --disable-wandb \
+    --cpu
   ```
  Runs training, writes results to a legacy `results.txt` under `$RESULTS`.
 - **Inspect the latest run**:
@@ -75,6 +76,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   - 150k-step CIFAR-10 run with SGD on an MLP using batch size 8 and learning rate 0.01.
   - Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`).
   - This tracks two most important measurements: lambda_max and batch sharpness
+  - The code automatically detects if there is cuda present, and runs on it. Use an explicit --cpu switch if you really want to run on cpu
 
 - **Uploading results to wandb**
   ```bash
