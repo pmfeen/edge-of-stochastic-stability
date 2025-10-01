@@ -17,7 +17,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   conda activate eoss
   pip install -r requirements.txt
   ```
-OR
+  OR
   ```bash
   python3 -m venv eoss
   source eoss/bin/activate
@@ -51,40 +51,40 @@ OR
 
 ## Standard Training Run
 
-- **Setting-up wandb**
-The code uses wanbd for logging the measurements during the runs. In particular, the rudimentary results.txt only supports very basic measurements.
-Therefore, setting up wandb is highly recommended. 
-Go to wandb.ai, create an account (they have edu discounts), and grab your API key.
-Add the API key and the project name (e.g. "eoss") into your env (e.g. into your .bashrc):
-```bash
-export WANDB_MODE=offline           # store runs locally 
-export WANDB_PROJECT=eoss         # project name, change if you want
-export WANDB_DIR=$RESULTS     # where to store the wandb data
+- **Setting-up wandb**:
+  The code uses wanbd for logging the measurements during the runs. In particular, the rudimentary results.txt only supports very basic measurements.
+  Therefore, setting up wandb is highly recommended. 
+  Go to wandb.ai, create an account (they have edu discounts), and grab your API key.
+  Add the API key and the project name (e.g. "eoss") into your env (e.g. into your .bashrc):
+  ```bash
+  export WANDB_MODE=offline           # store runs locally 
+  export WANDB_PROJECT=eoss         # project name, change if you want
+  export WANDB_DIR=$RESULTS     # where to store the wandb data
 
-export WANDB_API_KEY=<your api key here>
-```
-While we are at it, go ahead and email wandb to enable [run forking](https://docs.wandb.ai/guides/runs/forking/) on your "wandb entity" - it takes a couple of days for them to do it, and you would need it to continue runs.
+  export WANDB_API_KEY=<your api key here>
+  ```
+  While we are at it, go ahead and email wandb to enable [run forking](https://docs.wandb.ai/guides/runs/forking/) on your "wandb entity" - it takes a couple of days for them to do it, and you would need it to continue runs.
 
 - **Launching training**
-```bash
-python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.01 \
-  --steps 150000 --num-data 8192 \
-  --init-scale 0.2 --dataset-seed 111 --init-seed 8312 \
-  --lambdamax --batch-sharpness
-```
-Note: this is too computationally demanding to run on CPU - recommended to run on GPU, e.g. through slurm
-- 150k-step CIFAR-10 run with SGD on an MLP using batch size 8 and learning rate 0.01.
-- Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`).
-- This tracks two most important measurements: lambda_max and batch sharpness
+  ```bash
+  python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.01 \
+    --steps 150000 --num-data 8192 \
+    --init-scale 0.2 --dataset-seed 111 --init-seed 8312 \
+    --lambdamax --batch-sharpness
+  ```
+  Note: this is too computationally demanding to run on CPU - recommended to run on GPU, e.g. through slurm
+  - 150k-step CIFAR-10 run with SGD on an MLP using batch size 8 and learning rate 0.01.
+  - Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`).
+  - This tracks two most important measurements: lambda_max and batch sharpness
 
 - **Uploading results to wandb**
-```bash
-cd $WANDB_DIR
-wandb sync --sync-all --include-offline --mark-synced --no-include-synced
-```
-If you were running with `WANDB_MODE=offline`, you know need to upload the results to wandb (the reason why we did it is often-times slurm jobs with GPUs don't have access to the internet). This command uploads it. You can use tmux to run this command repeatedly (I know this is a hack, I don't care)
+  ```bash
+  cd $WANDB_DIR
+  wandb sync --sync-all --include-offline --mark-synced --no-include-synced
+  ```
+  If you were running with `WANDB_MODE=offline`, you know need to upload the results to wandb (the reason why we did it is often-times slurm jobs with GPUs don't have access to the internet). This command uploads it. You can use tmux to run this command repeatedly (I know this is a hack, I don't care)
 
-You can now go to your wandb panel to view the results!
+  You can now go to your wandb panel to view the results!
 
 
 ## Visualization
