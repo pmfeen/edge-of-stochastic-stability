@@ -35,10 +35,14 @@ from utils.quadratic import QuadraticApproximation, flatten_params, set_model_pa
 from torch.autograd import grad
 import json
 
+if 'DATASETS' not in os.environ:
+    raise ValueError("Please set the environment variable 'DATASETS'. Use 'export DATASETS=/path/to/datasets'")
+if 'RESULTS' not in os.environ:
+    raise ValueError("Please set the environment variable 'RESULTS'. Use 'export RESULTS=/path/to/results'")
 
-DATASET_FOLDER = Path(os.environ.get('DATASETS', '/scratch/gpfs/andreyev/datasets/'))
+DATASET_FOLDER = Path(os.environ.get('DATASETS'))
 # export RESULTS=/scratch/gpfs/andreyev/eoss/results
-RES_FOLDER = Path(os.environ.get('RESULTS', '/scratch/gpfs/andreyev/eoss/results'))
+RES_FOLDER = Path(os.environ.get('RESULTS'))
 
 
 # -------------------------------------

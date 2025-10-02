@@ -4,7 +4,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 
 ## Key Capabilities
 - Run training for MLP/CNN/ResNet on CIFAR‑10/Fashion‑MNIST/SVHN with SGD, SGDM, or Adam.
-- Measure core quantities: Batch Sharpness, $\lambda_{\max}$ (and other top eigenvalues of the Hessian of the loss), and GNI.
+- Measure core quantities: Batch Sharpness, $\lambda_{\max}$ (and other top eigenvalues of the Hessian of the loss), GNI, and Hessian trace
 - Log to Weights & Biases for visualization, sweeps, and plots
 - Easily extend with new measurements (see “Adding new measurements” checklist).
 - Restart runs from a checkpoint and change hyper‑parameters mid‑training
@@ -33,14 +33,15 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 ```bash
   python setup/download_datasets.py
   ```
+  If you are running on MacOS, this might fail because the python process doesn't have disk access. A *potential* solution is to enable full disk access in System Settings.
 - **Sanity run (CPU-friendly)**:
   ```bash
-  python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.02 \
-    --steps 10000 --num-data 64 \
-    --lambdamax --batch-sharpness --disable-wandb \
-    --cpu
+  python training.py --dataset cifar10 --model mlp --batch 4 --lr 0.05 \
+  --steps 1000 --num-data 64 \
+  --lambdamax --batch-sharpness --disable-wandb \
+  --cpu
   ```
- Runs training, writes results to a legacy `results.txt` under `$RESULTS`.
+ Runs training, writes results to a legacy `results.txt` under `$RESULTS`. Should take less than a minute to run.
 - **Inspect the latest run**:
   ```bash
   python visualization/plot_results.py
@@ -52,7 +53,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 ## Standard Training Run
 
 - **Setting-up wandb**:
-  The code uses wanbd for logging the measurements during the runs. In particular, the rudimentary results.txt only supports very basic measurements.
+  The code uses wandb for logging the measurements during the runs. In particular, the rudimentary results.txt only supports very basic measurements.
   Therefore, setting up wandb is highly recommended. 
   Go to wandb.ai, create an account (they have edu discounts), and grab your API key.
   Add the API key and the project name (e.g. "eoss") into your env (e.g. into your .bashrc):
@@ -63,6 +64,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 
   export WANDB_API_KEY=<your api key here>
   ```
+  This, respectively: stores results locally (without uploading to wandb servers); give project name (change if you want); selects where to store the wandb data; gives the api key;
   While we are at it, go ahead and email wandb to enable [run forking](https://docs.wandb.ai/guides/runs/forking/) on your "wandb entity" - it takes a couple of days for them to do it, and you would need it to continue runs.
 
 - **Launching training**
@@ -85,11 +87,17 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   ```
   If you were running with `WANDB_MODE=offline`, you know need to upload the results to wandb (the reason why we did it is often-times slurm jobs with GPUs don't have access to the internet). This command uploads it. You can use tmux to run this command repeatedly (I know this is a hack, I don't care)
 
-  You can now go to your wandb panel to view the results!
+  You can now go to your wandb.ai panel to view the results!
 
 
 ## Visualization
-Use `visualization/template.ipynb` for visualizing runs. THis notebook should be extended for more concrete plots. One can either specify the wandb ids to plot (can be taken e.g. from the run's url in the web interface), or pull all the runs from one tag (convenient for sweeps, see below)
+Use `visualization/template.ipynb` for visualizing runs. This notebook should be extended for more concrete plots. One can either specify the wandb ids to plot (can be taken e.g. from the run's url in the web interface), or pull all the runs from one tag (convenient for sweeps, see below)
+
+## Varying hyper-parameters
+- You can start with changing the learning rate/step size: notice how the 2/η threshold moves
+- Changing batch size: notice how the level of stabilization of lambda_max changes (the bigger the batch size, the higher the level)
+- If you set learning rate as too low (relative to the "difficulty" of the problem), you might not enter EoSS regime. That is, you are going to converge before progressive sharpening brings you to regime of instability, and batch sharpness stabilizes below 2/η.
+- If you set batch size too small (for the given step size), you might actually not converge. That is, you will enter a sort of EoSS-like instability regime, where batch sharpness is around 2/η, but there is no loss reduction happening. The reason behind this is usually ill-conditioned landscape, and is the exact situation of when in training one needs to increase the batch size/reduce the learning rate to "continue" training - i.e. indicating that there is no direction in the landscape which will continue training without causing progressive sharpening (which cannot happen because batch sharpness is already at 2/η).
 
 ## Things to be added at some point
 - Transformer support - ViT (easier), for language (harder)
