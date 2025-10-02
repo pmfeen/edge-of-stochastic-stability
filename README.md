@@ -72,11 +72,12 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.01 \
     --steps 150000 --num-data 8192 \
     --init-scale 0.2 --dataset-seed 111 --init-seed 8312 \
+    --stop-loss 0.00001 
     --lambdamax --batch-sharpness
   ```
   Note: this is too computationally demanding to run on CPU - recommended to run on GPU, e.g. through slurm
   - 150k-step CIFAR-10 run with SGD on an MLP using batch size 8 and learning rate 0.01.
-  - Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`).
+  - Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`). Stops when the loss is at 1e-5.
   - This tracks two most important measurements: lambda_max and batch sharpness
   - The code automatically detects if there is cuda present, and runs on it. Use an explicit --cpu switch if you really want to run on cpu
 
@@ -93,7 +94,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 ## Visualization
 Use `visualization/template.ipynb` for visualizing runs. This notebook should be extended for more concrete plots. One can either specify the wandb ids to plot (can be taken e.g. from the run's url in the web interface), or pull all the runs from one tag (convenient for sweeps, see below)
 
-## Varying hyper-parameters
+## Varying hyperparameters
 - You can start with changing the learning rate/step size: notice how the 2/η threshold moves
 - Changing batch size: notice how the level of stabilization of lambda_max changes (the bigger the batch size, the higher the level)
 - If you set learning rate as too low (relative to the "difficulty" of the problem), you might not enter EoSS regime. That is, you are going to converge before progressive sharpening brings you to regime of instability, and batch sharpness stabilizes below 2/η.
@@ -126,7 +127,7 @@ Use `notebooks/view_landscape.ipynb` for an example of a notebook that loads a s
 
 ## Continuing a run
 You need forking functionality to be enabled in wandb for this to work (see above). 
-Resume a run witch changed hyper-parameters (e.g. reducing learning rate)
+Resume a run witch changed hyperparameters (e.g. reducing learning rate)
   ```bash
 python training.py --dataset cifar10 --model mlp --batch 8 --lr 0.01 \
   --steps 150000 --num-data 8192 \
