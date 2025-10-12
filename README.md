@@ -7,7 +7,7 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 - Measure core quantities: Batch Sharpness, $\lambda_{\max}$ (and other top eigenvalues of the Hessian of the loss), GNI, and Hessian trace
 - Log to Weights & Biases for visualization, sweeps, and plots
 - Easily extend with new measurements (see “Adding new measurements” checklist).
-- Restart runs from a checkpoint and change hyper‑parameters mid‑training
+- Restart runs from a checkpoint and change hyper‑parameters mid‑training.
 
 ## Quick Start
 - **Setup** (virtual environment highly recommended):
@@ -78,8 +78,8 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
   Note: this is too computationally demanding to run on CPU - recommended to run on GPU, e.g. through slurm
   - 150k-step CIFAR-10 run with SGD on an MLP using batch size 8 and learning rate 0.01.
   - Seeds control dataset shuffling (`--dataset-seed`) and parameter initialization (`--init-seed`). Stops when the loss is at 1e-5.
-  - This tracks two most important measurements: lambda_max and batch sharpness
-  - The code automatically detects if there is cuda present, and runs on it. Use an explicit --cpu switch if you really want to run on cpu
+  - This tracks two most important measurements: lambda_max and batch sharpness.
+  - The code automatically detects if there is cuda present, and runs on it. Use an explicit --cpu switch if you really want to run on cpu.
 
 - **Uploading results to wandb**
   ```bash
@@ -95,17 +95,17 @@ This repository accompanies the paper [Edge of Stochastic Stability: Revisiting 
 Use `visualization/template.ipynb` for visualizing runs. This notebook should be extended for more concrete plots. One can either specify the wandb ids to plot (can be taken e.g. from the run's url in the web interface), or pull all the runs from one tag (convenient for sweeps, see below)
 
 ## Varying hyperparameters
-- You can start with changing the learning rate/step size: notice how the 2/η threshold moves
-- Changing batch size: notice how the level of stabilization of lambda_max changes (the bigger the batch size, the higher the level)
+- You can start with changing the learning rate/step size: notice how the 2/η threshold moves.
+- Changing batch size: notice how the level of stabilization of lambda_max changes (the bigger the batch size, the higher the level).
 - If you set learning rate as too low (relative to the "difficulty" of the problem), you might not enter EoSS regime. That is, you are going to converge before progressive sharpening brings you to regime of instability, and batch sharpness stabilizes below 2/η.
 - If you set batch size too small (for the given step size), you might actually not converge. That is, you will enter a sort of EoSS-like instability regime, where batch sharpness is around 2/η, but there is no loss reduction happening. The reason behind this is usually ill-conditioned landscape, and is the exact situation of when in training one needs to increase the batch size/reduce the learning rate to "continue" training - i.e. indicating that there is no direction in the landscape which will continue training without causing progressive sharpening (which cannot happen because batch sharpness is already at 2/η).
 
 ## Things to be added at some point
-- Transformer support - ViT (easier), for language (harder)
+- Transformer support - ViT (easier), for language (harder).
 - Dataloader support (rather than loading the whole dataset into the memory). Not too diffcult - just make sure you are not making slow operations like the unparallelized imagine transformation of PyTorch. When I first did it, it took most of the computation time.
-- Batches in the Hessian-vector product. Right now when computting the full-batch lambda_max, we might run out of memory on bigger models. It can be computed with smaller chunks of samples (Hessian is additive), but then you kinda lose the current speed-up where you keep one of the forward passes
-- Froward-mode AD + batching of vectors in the hvp. Honestly, unsure about this one. It is supposed to speed-up computation/use less memory, but in my experiments I didn' notice any improvements
-- Deterministic batches (determined by the epoch) - necessary for the restarts to see the exact same batches (easy)
+- Batches in the Hessian-vector product. Right now when computting the full-batch lambda_max, we might run out of memory on bigger models. It can be computed with smaller chunks of samples (Hessian is additive), but then you kinda lose the current speed-up where you keep one of the forward passes.
+- Froward-mode AD + batching of vectors in the hvp. Honestly, unsure about this one. It is supposed to speed-up computation/use less memory, but in my experiments I didn' notice any improvements.
+- Deterministic batches (determined by the epoch) - necessary for the restarts to see the exact same batches (easy).
 - Tracking of distance between weights in different runs. I would recommend using a random projection, but it would be good to track this, the style of "Break-even point.." by Jastrzebski et al. and "Edge of Stability" by Cohen et al. One should use a projection to smaller random subspace (there is a way to do that efficiently).
 - CI tests
 I would also appreciate pull requests with any of those!
@@ -120,9 +120,9 @@ Use `notebooks/view_landscape.ipynb` for an example of a notebook that loads a s
 - wandb initializes automatically; set `WANDB_PROJECT`/`WANDB_MODE` if you need custom routing. Using wandb is recommended because `results.txt` only preserves the basic measurement trio for backward compatibility.
 
 - Tag and annotate runs for later comparison:
-  - `--wandb-tag batch-size-sweep` (useful for sweeps)
-  - `--wandb-name mlp_b8_lr1e-2`
-  - `--wandb-notes "increase lr after 40k steps"`
+  - `--wandb-tag batch-size-sweep` (useful for sweeps).
+  - `--wandb-name mlp_b8_lr1e-2`.
+  - `--wandb-notes "increase lr after 40k steps"`.
 - Additional wandb details are in the Appendix.
 
 ## Continuing a run
@@ -180,7 +180,7 @@ There is a somewhat rudimentary way to run hyperparameter sweeps. Basically, you
 - `--param-distance`: Measures the L₂ gap to a reference parameter vector each time cadence allows (`training.py:302`); build it from `--param-file` or fall back to the zero vector when none is supplied.
 
 ## On Initialization of NNs
-- The size of initialization really matters for the experiments. That's why the default initalization is low - so that initial landscape sharpness is low. Feel free to edit `--init-scale`
+- The size of initialization really matters for the experiments. That's why the default initalization is low - so that initial landscape sharpness is low. Feel free to edit `--init-scale`.
 
 ## On Tests
 We don't have CI implemented yet. The `tests/` folder just contains a number of random tests.
