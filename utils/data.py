@@ -41,6 +41,14 @@ def get_dataset_presets():
             'imagenet32': {
                 'input_dim': 3*32*32,
                 'output_dim': 1000
+            },
+            'cifar10_images': {
+                'input_dim': (3, 32, 32),  # Image format for DDPM
+                'output_dim': 1  # DDPM doesn't use output targets
+            },
+            'fmnist_images': {
+                'input_dim': (1, 28, 28),  # Image format for DDPM
+                'output_dim': 1  # DDPM doesn't use output targets
             }
 
         }
@@ -432,6 +440,106 @@ def prepare_imagenet32(dataset_folder: Path, num_data: int, dataset_seed: int = 
     return X_train, Y_train, X_test, Y_test
 
 
+def prepare_cifar10_images(dataset_folder: Path, num_data: int, classes: list, dataset_seed: int = 888):
+    """
+    Prepare CIFAR-10 dataset in image format for DDPM training.
+    
+    Args:
+        dataset_folder: Path to dataset folder
+        num_data: Number of data points to use
+        classes: List of classes to use (ignored for DDPM)
+        dataset_seed: Random seed for reproducibility
+        
+    Returns:
+        Tuple of (X_train, Y_train, X_test, Y_test) where X are images
+    """
+    from torchvision import datasets, transforms
+    
+    # Set random seed for reproducibility
+    torch.manual_seed(dataset_seed)
+    
+    # Transform to normalize images to [-1, 1] range for DDPM
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Normalize to [-1, 1]
+    ])
+    
+    # Load CIFAR-10 dataset
+    datafolder = dataset_folder / 'cifar10'
+    train_dataset = datasets.CIFAR10(
+        root=str(datafolder),
+        train=True,
+        download=True,
+        transform=transform
+    )
+    
+    test_dataset = datasets.CIFAR10(
+        root=str(datafolder),
+        train=False,
+        download=True,
+        transform=transform
+    )
+    
+    # Convert to tensors
+    X_train = torch.stack([train_dataset[i][0] for i in range(min(len(train_dataset), num_data))])
+    X_test = torch.stack([test_dataset[i][0] for i in range(min(len(test_dataset), num_data // 4))])
+    
+    # Create dummy targets (DDPM doesn't use targets)
+    Y_train = torch.zeros(len(X_train), 1)
+    Y_test = torch.zeros(len(X_test), 1)
+    
+    return X_train, Y_train, X_test, Y_test
+
+
+def prepare_fmnist_images(dataset_folder: Path, num_data: int, classes: list, dataset_seed: int = 888):
+    """
+    Prepare Fashion-MNIST dataset in image format for DDPM training.
+    
+    Args:
+        dataset_folder: Path to dataset folder
+        num_data: Number of data points to use
+        classes: List of classes to use (ignored for DDPM)
+        dataset_seed: Random seed for reproducibility
+        
+    Returns:
+        Tuple of (X_train, Y_train, X_test, Y_test) where X are images
+    """
+    from torchvision import datasets, transforms
+    
+    # Set random seed for reproducibility
+    torch.manual_seed(dataset_seed)
+    
+    # Transform to normalize images to [-1, 1] range for DDPM
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))  # Normalize to [-1, 1] for grayscale
+    ])
+    
+    # Load Fashion-MNIST dataset
+    datafolder = dataset_folder / 'fmnist'
+    train_dataset = datasets.FashionMNIST(
+        root=str(datafolder),
+        train=True,
+        download=True,
+        transform=transform
+    )
+    
+    test_dataset = datasets.FashionMNIST(
+        root=str(datafolder),
+        train=False,
+        download=True,
+        transform=transform
+    )
+    
+    # Convert to tensors
+    X_train = torch.stack([train_dataset[i][0] for i in range(min(len(train_dataset), num_data))])
+    X_test = torch.stack([test_dataset[i][0] for i in range(min(len(test_dataset), num_data // 4))])
+    
+    # Create dummy targets (DDPM doesn't use targets)
+    Y_train = torch.zeros(len(X_train), 1)
+    Y_test = torch.zeros(len(X_test), 1)
+    
+    return X_train, Y_train, X_test, Y_test
 
 
 def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: int, classes: list, dataset_seed: int = 888,
@@ -453,4 +561,8 @@ def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: in
         return prepare_fmnist(dataset_folder, num_data, dataset_seed=dataset_seed, loss_type=loss_type)
     if dataset == 'imagenet32':
         return prepare_imagenet32(dataset_folder, num_data, dataset_seed=dataset_seed, loss_type=loss_type)
+    if dataset == 'cifar10_images':
+        return prepare_cifar10_images(dataset_folder, num_data, classes, dataset_seed=dataset_seed)
+    if dataset == 'fmnist_images':
+        return prepare_fmnist_images(dataset_folder, num_data, classes, dataset_seed=dataset_seed)
     

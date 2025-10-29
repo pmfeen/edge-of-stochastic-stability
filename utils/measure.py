@@ -707,7 +707,11 @@ def calculate_averaged_grad_H_grad(net,
         X_batch = X[random_idx]
         Y_batch = Y[random_idx]
 
-        loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
+        # Handle DDPM models that compute loss internally
+        if hasattr(net, 'diffusion'):  # DDPMWrapper
+            loss = net(X_batch)
+        else:
+            loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
 
         
         gHg, norm_g = compute_grad_H_grad(loss, net, return_ghg_gg_separately=True)
@@ -909,8 +913,11 @@ def calculate_gni(net,
         X_batch = X[random_idx]
         Y_batch = Y[random_idx]
 
-
-        loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
+        # Handle DDPM models that compute loss internally
+        if hasattr(net, 'diffusion'):  # DDPMWrapper
+            loss = net(X_batch)
+        else:
+            loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
 
         grads_vector = flatt(torch.autograd.grad(loss, params))
         step_vector = grads_vector.detach()
@@ -1547,8 +1554,11 @@ def calculate_averaged_lambdamax(net,
         X_batch = X[random_idx]
         Y_batch = Y[random_idx]
 
-
-        loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
+        # Handle DDPM models that compute loss internally
+        if hasattr(net, 'diffusion'):  # DDPMWrapper
+            loss = net(X_batch)
+        else:
+            loss = loss_fn(net(X_batch).squeeze(dim=-1), Y_batch)
 
         sharpness = compute_eigenvalues(loss, 
                         net,

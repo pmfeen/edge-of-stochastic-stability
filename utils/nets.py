@@ -13,6 +13,12 @@ from typing import Union
 from pathlib import Path
 from contextlib import contextmanager
 
+# Import DDPMWrapper for type checking
+try:
+    from utils.ddpm_wrapper import DDPMWrapper
+except ImportError:
+    DDPMWrapper = None
+
 
 
 def get_model_presets():
@@ -94,6 +100,30 @@ def get_model_presets():
         'resnet_bn': {
             'type': 'resnet_bn',
             'params': {},
+        },
+        'ddpm': {
+            'type': 'ddpm',
+            'params': {
+                'dim': 64,
+                'dim_mults': (1, 2, 4, 8),
+                'channels': 3,
+                'image_size': (32, 32),
+                'timesteps': 1000,
+                'beta_schedule': 'cosine',
+                'objective': 'pred_noise'
+            }
+        },
+        'ddpm_small': {
+            'type': 'ddpm',
+            'params': {
+                'dim': 32,
+                'dim_mults': (1, 2, 4),
+                'channels': 3,
+                'image_size': (32, 32),
+                'timesteps': 1000,
+                'beta_schedule': 'cosine',
+                'objective': 'pred_noise'
+            }
         }
     }
     return model_presets
@@ -278,6 +308,25 @@ def prepare_net(model_type: str,
     if model_type == 'resnet_bn':
         raise "Not implemented - you are still using old resnet_bn"
         net = resnet10_bn()
+    
+    if model_type == 'ddpm':
+        from utils.ddpm_wrapper import create_ddpm_model
+        # For DDPM, input_dim should be (C, H, W) tuple
+        if isinstance(params['input_dim'], int):
+            # Convert flattened dimension to image dimensions
+            # Assume CIFAR-10 format: 3*32*32 -> (3, 32, 32)
+            if params['input_dim'] == 3*32*32:
+                input_dim = (3, 32, 32)
+            elif params['input_dim'] == 1*28*28:
+                input_dim = (1, 28, 28)
+            else:
+                raise ValueError(f"Cannot convert input_dim {params['input_dim']} to image format")
+        else:
+            input_dim = params['input_dim']
+        
+        # Extract DDPM-specific parameters
+        ddpm_params = {k: v for k, v in params.items() if k not in ['input_dim', 'output_dim']}
+        net = create_ddpm_model(input_dim, params['output_dim'], **ddpm_params)
 
     return net
 
@@ -427,6 +476,10 @@ def initialize_net(net, scale=None, seed=None):
             initialize_resnet_bn(net, scale=scale)
         elif isinstance(net, CNN):
             initialize_cnn(net, scale=scale)
+        elif isinstance(net, DDPMWrapper):
+            # DDPM models are already initialized by the diffusion library
+            # We don't need to reinitialize them
+            pass
         else:
             raise ValueError("Unknown net type")
 

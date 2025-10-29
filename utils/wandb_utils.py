@@ -89,13 +89,14 @@ def init_wandb(args, step_to_start):
         run = wandb.init(
             project=os.getenv("WANDB_PROJECT", "eoss"),
             mode=os.getenv("WANDB_MODE", "offline"),   # honours your env var
+            entity=os.getenv("WANDB_ENTITY", None),
             name=run_name,
             config=vars(args),      # captures all CLI flags
             save_code=True,         # snapshot calling file & git commit
             tags=tags if tags else None,
             notes=getattr(args, 'wandb_notes', None)
         )
-        print(f"Started new wandb run: {run.id}")
+        print(f"Started new wandb run: {run.id}, {run.name}, {run.project}, {run.entity}")
         
 
     # --- metric definitions so W&B plots look correct -------------

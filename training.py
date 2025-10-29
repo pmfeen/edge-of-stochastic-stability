@@ -16,6 +16,7 @@ import time
 from utils.data import prepare_dataset, get_dataset_presets
 from utils.nets import SquaredLoss, MLP, CNN, prepare_net, initialize_net, prepare_optimizer, get_model_presets
 from utils.nets import ResNet
+from utils.ddpm_wrapper import DDPMWrapper
 from utils.storage import initialize_folders
 from utils.wandb_utils import (
     init_wandb,
@@ -193,8 +194,13 @@ class MeasurementRunner:
                 X_subset = self.X
                 Y_subset = self.Y
 
-            preds = self.net(X_subset).squeeze(dim=-1)
-            loss = self.loss_fn(preds, Y_subset)
+            # Handle DDPM models that compute loss internally
+            if isinstance(self.net, DDPMWrapper):
+
+                loss = self.net(X_subset)
+            else:
+                preds = self.net(X_subset).squeeze(dim=-1)
+                loss = self.loss_fn(preds, Y_subset)
 
             if self.eigenvector_cache is not None:
                 max_iterations = 100 if not self.use_power_iteration else 1000
@@ -255,7 +261,8 @@ class MeasurementRunner:
 
             metrics['lmax'] = lmax_value.item()
             metrics['full_loss'] = loss.item()
-            metrics['full_accuracy'] = calculate_accuracy(preds, Y_subset)
+            if not isinstance(self.net, DDPMWrapper):
+                metrics['full_accuracy'] = calculate_accuracy(preds, Y_subset)
 
             epoch_loss_update = metrics['full_loss']
 
@@ -811,26 +818,48 @@ def train(
 
             else:
                 # Standard SGD step
-                preds = net(X_batch).squeeze(dim=-1)
+                if isinstance(net, DDPMWrapper):
+                    # DDPM forward pass - loss is computed internally with computational graph
+                    loss = net(X_batch)
+                    
+                    if math.isinf(loss.item()) or math.isnan(loss.item()):
+                        results_file.flush()
+                        results_file.close()
+                        if wandb_run is not None:
+                            wandb_run.finish()
+                        raise ValueError("Loss is inf or NaN, stopping the training")
+                    
+                    # Check if we should initialize quadratic approximation
+                    if quad_approx is not None:
+                        full_dataset = (X, Y) if use_gauss_newton else None
+                        quad_approx.initialize_anchor(step_number, loss.item(), full_dataset)
+                    
+                    # Backward pass for minibatch gradient
+                    loss.backward()
+                    
+                    optimizer.step()
+                else:
+                    # Standard supervised learning
+                    preds = net(X_batch).squeeze(dim=-1)
 
-                loss = loss_fn(preds, Y_batch)
+                    loss = loss_fn(preds, Y_batch)
 
-                if math.isinf(loss.item()) or math.isnan(loss.item()):
-                    results_file.flush()
-                    results_file.close()
-                    if wandb_run is not None:
-                        wandb_run.finish()
-                    raise ValueError("Loss is inf or NaN, stopping the training")
+                    if math.isinf(loss.item()) or math.isnan(loss.item()):
+                        results_file.flush()
+                        results_file.close()
+                        if wandb_run is not None:
+                            wandb_run.finish()
+                        raise ValueError("Loss is inf or NaN, stopping the training")
 
-                # Check if we should initialize quadratic approximation
-                if quad_approx is not None:
-                    full_dataset = (X, Y) if use_gauss_newton else None
-                    quad_approx.initialize_anchor(step_number, loss.item(), full_dataset)
+                    # Check if we should initialize quadratic approximation
+                    if quad_approx is not None:
+                        full_dataset = (X, Y) if use_gauss_newton else None
+                        quad_approx.initialize_anchor(step_number, loss.item(), full_dataset)
 
-                # Backward pass for minibatch gradient
-                loss.backward()
+                    # Backward pass for minibatch gradient
+                    loss.backward()
 
-                optimizer.step()
+                    optimizer.step()
 
 
             # Handle loss value (SDE returns float, others return tensor)
