@@ -124,6 +124,18 @@ def get_model_presets():
                 'beta_schedule': 'cosine',
                 'objective': 'pred_noise'
             }
+        },
+        'ddpm_4x4': {
+            'type': 'ddpm',
+            'params': {
+                'dim': 16,
+                'dim_mults': (1, 2),
+                'channels': 1,
+                'image_size': (4, 4),
+                'timesteps': 100,
+                'beta_schedule': 'linear',
+                'objective': 'pred_noise'
+            }
         }
     }
     return model_presets

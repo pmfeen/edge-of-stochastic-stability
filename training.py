@@ -10,6 +10,7 @@ from pathlib import Path
 import math
 import random
 import argparse
+import tqdm as tqdm
 
 import time
 
@@ -599,7 +600,7 @@ def train(
     # -------------------------------------
     # Section: Training Step
     # -------------------------------------
-    for epoch in range(epoch_to_start, max_epochs):
+    for epoch in tqdm.tqdm(range(epoch_to_start, max_epochs)):
         if step_number >= max_steps:
             print(f"Reached max steps {max_steps}, stopping the training")
             results_file.flush()
@@ -868,7 +869,7 @@ def train(
 
             # --- Checkpoint Handling ---
             # Save checkpoint using wandb system
-            checkpoint_path = save_checkpoint_wandb(
+            save_checkpoint_wandb(
                 model=net,
                 optimizer=optimizer,
                 step=step_number,
@@ -877,8 +878,6 @@ def train(
                 run_id=run_id,
                 save_every_n_steps=checkpoint_every_n_steps
             )
-            if checkpoint_path:
-                print(f"Checkpoint saved at step {step_number}: {checkpoint_path}")
 
             # -------------------------------------
             # Section: Logging (Step)
@@ -986,7 +985,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch', type=int, default=64, help='Input batch size for training')
     parser.add_argument('--epochs', type=int, help='Number of epochs to train')
     parser.add_argument('--steps', type=int, default=10000, help='Number of steps to train. Either epochs or steps should be provided')
-    parser.add_argument('--cpu', action='store_true', help='Force training to run on CPU even if CUDA is available')
+    parser.add_argument('--device', type=str, default='cuda', help='Device to use for training')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for training')
     parser.add_argument('--stop-loss', '--stop_loss', type=float, default=None, help='Stop training if loss goes below this value')
     # --- Loss Configuration ---
@@ -1098,12 +1097,12 @@ if __name__ == '__main__':
     # --- Parameter Extraction ---
     batch_size = args.batch
     dataset = args.dataset
-    if args.cpu:
+    if args.device == 'cpu':
         if T.cuda.is_available():
             print('CUDA is available but running on CPU due to --cpu flag.')
         device = 'cpu'
     else:
-        device = T.device('cuda') if T.cuda.is_available() else 'cpu'
+        device = T.device(args.device)
 
     if args.momentum is not None and args.adam:
         raise ValueError("You should provide either momentum or adam, not both")

@@ -8,11 +8,36 @@ import torch.nn as nn
 from einops import rearrange, repeat
 import numpy as np
 from torchvision import datasets
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 import torch.nn.functional as F
 
 
+
+
+class GaussianMixture2D(Dataset):
+    """2D Gaussian Mixture dataset for testing DDPM on synthetic data."""
+    
+    def __init__(self, n_samples=10000, n_modes=8, radius=5.0, std=0.1):
+        # equally spaced centers on a circle
+        angles = np.linspace(0, 2*np.pi, n_modes, endpoint=False)
+        self.centers = np.stack([radius*np.cos(angles), radius*np.sin(angles)], axis=1)
+        self.n_samples = n_samples
+        self.std = std
+
+        # pick random centers and sample around them
+        self.data = []
+        for _ in range(n_samples):
+            c = self.centers[np.random.choice(n_modes)]
+            x, y = np.random.normal(c[0], std), np.random.normal(c[1], std)
+            self.data.append([x, y])
+        self.data = torch.tensor(self.data, dtype=torch.float32)
+
+    def __len__(self):
+        return self.n_samples
+
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 
 def get_dataset_presets():
@@ -48,6 +73,10 @@ def get_dataset_presets():
             },
             'fmnist_images': {
                 'input_dim': (1, 28, 28),  # Image format for DDPM
+                'output_dim': 1  # DDPM doesn't use output targets
+            },
+            'gaussian_mixture_2d': {
+                'input_dim': (1, 4, 4),  # Reshaped to 4x4 images for DDPM
                 'output_dim': 1  # DDPM doesn't use output targets
             }
 
@@ -542,6 +571,59 @@ def prepare_fmnist_images(dataset_folder: Path, num_data: int, classes: list, da
     return X_train, Y_train, X_test, Y_test
 
 
+def prepare_gaussian_mixture_2d(dataset_folder: Path, num_data: int, classes: list, dataset_seed: int = 888):
+    """
+    Prepare GaussianMixture2D dataset for DDPM training.
+    
+    Args:
+        dataset_folder: Path to dataset folder (not used for synthetic data)
+        num_data: Number of data points to use
+        classes: List of classes to use (ignored for DDPM)
+        dataset_seed: Random seed for reproducibility
+        
+    Returns:
+        Tuple of (X_train, Y_train, X_test, Y_test) where X are 2D points reshaped for DDPM
+    """
+    # Set random seed for reproducibility
+    torch.manual_seed(dataset_seed)
+    np.random.seed(dataset_seed)
+    
+    # Create dataset
+    dataset = GaussianMixture2D(n_samples=num_data, n_modes=8, radius=5.0, std=0.1)
+    
+    # Convert to tensors and normalize to [-1, 1] range for DDPM
+    X_train = dataset.data
+    
+    # Normalize the 2D points to [-1, 1] range
+    # Find the range of the data
+    x_min, x_max = X_train[:, 0].min(), X_train[:, 0].max()
+    y_min, y_max = X_train[:, 1].min(), X_train[:, 1].max()
+    
+    # Normalize to [-1, 1]
+    X_train[:, 0] = 2 * (X_train[:, 0] - x_min) / (x_max - x_min) - 1
+    X_train[:, 1] = 2 * (X_train[:, 1] - y_min) / (y_max - y_min) - 1
+    
+    # Reshape 2D data to work with DDPM UNet architecture
+    # DDPM expects images of shape (batch, channels, height, width)
+    # We'll reshape (N, 2) -> (N, 1, 4, 4) to meet UNet requirements
+    batch_size = X_train.shape[0]
+    
+    # Pad the 2D data to create 4x4 "images"
+    X_train_reshaped = torch.zeros(batch_size, 1, 4, 4)
+    X_train_reshaped[:, 0, 0, 0] = X_train[:, 0]  # x coordinate
+    X_train_reshaped[:, 0, 0, 1] = X_train[:, 1]  # y coordinate
+    # Leave the rest as zeros (padding)
+    
+    # Create test set (use same data for simplicity)
+    X_test = X_train_reshaped.clone()
+    
+    # Create dummy targets (DDPM doesn't use targets)
+    Y_train = torch.zeros(len(X_train_reshaped), 1)
+    Y_test = torch.zeros(len(X_test), 1)
+    
+    return X_train_reshaped, Y_train, X_test, Y_test
+
+
 def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: int, classes: list, dataset_seed: int = 888,
                     loss_type: str = 'mse'
                     ):
@@ -565,4 +647,6 @@ def prepare_dataset(dataset: str, dataset_folder: Union[str, Path], num_data: in
         return prepare_cifar10_images(dataset_folder, num_data, classes, dataset_seed=dataset_seed)
     if dataset == 'fmnist_images':
         return prepare_fmnist_images(dataset_folder, num_data, classes, dataset_seed=dataset_seed)
+    if dataset == 'gaussian_mixture_2d':
+        return prepare_gaussian_mixture_2d(dataset_folder, num_data, classes, dataset_seed=dataset_seed)
     
